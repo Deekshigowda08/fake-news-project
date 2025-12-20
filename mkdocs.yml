@@ -1,0 +1,28 @@
+site_name: Multimodal Fake News Detection
+site_description: Research documentation for BERT and Vision Transformer based fake news detection.
+site_url: https://CuriousSensie.github.io/fake-news-detection/
+repo_name: FakeNewsDetection
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: blue
+nav:
+  - Overview: index.md
+  - Dataset: dataset.md
+  - Methodology: methodology.md
+  - Experiments: experiments.md
+  - Results: results.md
+  - Limitations: limitations.md
+  - Reproducibility: reproducibility.md
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - tables
+  - pymdownx.superfences
