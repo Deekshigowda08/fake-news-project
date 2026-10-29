@@ -5,11 +5,14 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Environments
+# Environments & Secrets
 .venv/
 venv/
 env/
 *env/
+.env
+.env.local
+.env.*.local
 
 # Jupyter
 .ipynb_checkpoints/
