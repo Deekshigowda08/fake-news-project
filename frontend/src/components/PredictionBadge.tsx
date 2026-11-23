@@ -11,33 +11,33 @@ interface PredictionBadgeProps {
 export function PredictionBadge({ verdict, size = "md" }: PredictionBadgeProps) {
   const configs = {
     TRUE: {
-      bg: "bg-emerald-500/15 border-emerald-500/30 text-emerald-300",
-      iconBg: "bg-emerald-500/20 text-emerald-400",
-      label: "VERIFIED TRUE",
+      bg: "bg-black border-zinc-500 text-white",
+      iconBg: "bg-white text-black",
+      label: "VERIFIED AUTHENTIC",
       icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 font-bold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
         </svg>
       ),
-      desc: "Corroborated by authoritative Tier-1/Tier-2 primary sources.",
+      desc: "Corroborated by authoritative real-world primary sources and verified news records.",
     },
     FALSE: {
-      bg: "bg-rose-500/15 border-rose-500/30 text-rose-300",
-      iconBg: "bg-rose-500/20 text-rose-400",
-      label: "FABRICATED / FALSE",
+      bg: "bg-black border-zinc-700 text-white",
+      iconBg: "bg-zinc-800 text-white border border-zinc-600",
+      label: "CONFIRMED FABRICATED / FAKE",
       icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 font-bold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
         </svg>
       ),
-      desc: "Directly contradicted or debunked by authoritative investigations.",
+      desc: "Directly contradicted or debunked by authoritative investigative sources.",
     },
     MISLEADING: {
-      bg: "bg-amber-500/15 border-amber-500/30 text-amber-300",
-      iconBg: "bg-amber-500/20 text-amber-400",
+      bg: "bg-black border-zinc-700 text-zinc-200",
+      iconBg: "bg-zinc-800 text-zinc-300 border border-zinc-600",
       label: "MISLEADING / OUT OF CONTEXT",
       icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -46,14 +46,14 @@ export function PredictionBadge({ verdict, size = "md" }: PredictionBadgeProps) 
           />
         </svg>
       ),
-      desc: "Contains partial truths presented with deceptive context or altered framing.",
+      desc: "Contains factual elements presented with deceptive framing or inaccurate attribution.",
     },
     UNVERIFIABLE: {
-      bg: "bg-slate-500/15 border-slate-500/30 text-slate-300",
-      iconBg: "bg-slate-500/20 text-slate-400",
-      label: "UNVERIFIABLE",
+      bg: "bg-black border-zinc-800 text-zinc-300",
+      iconBg: "bg-zinc-900 text-zinc-400 border border-zinc-700",
+      label: "INSUFFICIENT EVIDENCE",
       icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -62,124 +62,71 @@ export function PredictionBadge({ verdict, size = "md" }: PredictionBadgeProps) 
           />
         </svg>
       ),
-      desc: "Insufficient independent reporting or conflicting non-authoritative claims.",
+      desc: "No conclusive primary or secondary records retrieved across news wires to adjudicate claims.",
     },
   };
 
-  const cfg = configs[verdict] || configs.UNVERIFIABLE;
-
-  if (size === "sm") {
-    return (
-      <span
-        className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-bold border shadow-sm ${cfg.bg}`}
-      >
-        <span className="shrink-0">{cfg.icon}</span>
-        <span>{cfg.label}</span>
-      </span>
-    );
-  }
-
-  if (size === "lg") {
-    return (
-      <div className={`flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5 rounded-2xl border-2 p-6 sm:p-7 shadow-2xl backdrop-blur-md ${cfg.bg}`}>
-        <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl shadow-lg ${cfg.iconBg}`}>
-          <div className="scale-150 transform">
-            {cfg.icon}
-          </div>
-        </div>
-        <div className="space-y-1.5 flex-1">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="text-2xl sm:text-3xl font-black tracking-tight text-white">{cfg.label}</span>
-            <span className="rounded-full bg-slate-900/60 px-3 py-1 text-xs uppercase font-mono font-bold tracking-wider border border-white/20 text-slate-200">
-              Final Consensus Verdict
-            </span>
-          </div>
-          <p className="text-base sm:text-lg text-slate-100 font-medium leading-relaxed">{cfg.desc}</p>
-        </div>
-      </div>
-    );
-  }
+  const config = configs[verdict] || configs.UNVERIFIABLE;
 
   return (
-    <div className={`flex items-center gap-4 rounded-xl border-2 p-4 sm:p-5 ${cfg.bg}`}>
-      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${cfg.iconBg}`}>
-        <div className="scale-125 transform">
-          {cfg.icon}
+    <div className={`rounded-xl border p-5 sm:p-6 ${config.bg} space-y-3`}>
+      <div className="flex items-center space-x-3.5">
+        <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${config.iconBg}`}>
+          {config.icon}
         </div>
-      </div>
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-bold tracking-tight text-white">{cfg.label}</span>
-          <span className="rounded bg-slate-900/50 px-2 py-0.5 text-xs uppercase font-mono font-bold border border-white/10 text-slate-200">
-            Adjudicated
+        <div>
+          <span className="text-[10px] font-mono tracking-wider text-zinc-400 uppercase font-medium">
+            Evidence Verification Verdict
           </span>
+          <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-white">{config.label}</h3>
         </div>
-        <p className="text-sm opacity-95 text-slate-200 font-medium">{cfg.desc}</p>
       </div>
+      <p className="text-xs sm:text-sm text-zinc-400 pl-1">{config.desc}</p>
     </div>
   );
 }
 
-export function MLVerdictPill({
-  predictedClass,
-  confidence,
-}: {
-  predictedClass: "real" | "fake" | "REAL_CLASSIFIED" | "FAKE_CLASSIFIED";
-  confidence?: number;
-}) {
-  const isReal = predictedClass.toLowerCase().includes("real");
+export function MLVerdictPill({ predictedClass, confidence }: { predictedClass: string; confidence: number }) {
+  const isFake = predictedClass.toLowerCase() === "fake";
   return (
     <div
-      className={`inline-flex items-center gap-2.5 rounded-xl border px-3.5 py-2 text-sm font-bold shadow-sm ${
-        isReal
-          ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-          : "border-rose-500/40 bg-rose-500/15 text-rose-300"
+      className={`inline-flex items-center space-x-2 rounded-lg px-3 py-1.5 border text-xs font-semibold ${
+        isFake
+          ? "bg-zinc-900 border-zinc-700 text-white"
+          : "bg-white border-white text-black"
       }`}
     >
-      <span className={`h-2.5 w-2.5 rounded-full ${isReal ? "bg-emerald-400" : "bg-rose-400"}`} />
-      <span>
-        ML Model: {isReal ? "REAL / AUTHENTIC" : "FAKE / UNRELIABLE"}
+      <span className={`h-2 w-2 rounded-full ${isFake ? "bg-zinc-400" : "bg-black"}`} />
+      <span>Model Prediction: {isFake ? "FAKE" : "REAL"}</span>
+      <span className={isFake ? "font-mono text-zinc-400" : "font-mono text-zinc-600"}>
+        ({Math.round(confidence * 100)}%)
       </span>
-      {confidence !== undefined && (
-        <span className="text-slate-300 font-mono text-xs">
-          ({(confidence * 100).toFixed(1)}% confidence)
-        </span>
-      )}
     </div>
   );
 }
 
-export function AgreementIndicator({
-  agreement,
-}: {
-  agreement: "agrees" | "disagrees" | "unresolved";
-}) {
-  const styles = {
+export function AgreementIndicator({ agreement }: { agreement: "agrees" | "disagrees" | "unresolved" }) {
+  const configs = {
     agrees: {
-      badge: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
-      text: "ML patterns & External Evidence Agree",
-      icon: "✓",
+      color: "text-zinc-200 border-zinc-700 bg-zinc-900",
+      text: "Consensus Alignment: Neural ML Prior Corroborates Evidence",
     },
     disagrees: {
-      badge: "border-amber-500/40 bg-amber-500/15 text-amber-300",
-      text: "Conflict: ML features contradict retrieved evidence",
-      icon: "⚠",
+      color: "text-zinc-200 border-zinc-700 bg-zinc-900",
+      text: "Divergence Detected: Neural Prior Conflicts With Real-World Evidence",
     },
     unresolved: {
-      badge: "border-slate-500/40 bg-slate-500/15 text-slate-300",
-      text: "Unresolved / Insufficient evidence cross-check",
-      icon: "ℹ",
+      color: "text-zinc-400 border-zinc-800 bg-zinc-950",
+      text: "Consensus Pending Further Investigation",
     },
   };
 
-  const style = styles[agreement] || styles.unresolved;
+  const c = configs[agreement] || configs.unresolved;
 
   return (
-    <span
-      className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-bold shadow-sm ${style.badge}`}
-    >
-      <span className="text-base font-extrabold">{style.icon}</span>
-      <span>{style.text}</span>
-    </span>
+    <div className={`rounded-lg border px-3 py-2 text-xs font-medium ${c.color} flex items-center gap-2`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
+      <span>{c.text}</span>
+    </div>
   );
 }

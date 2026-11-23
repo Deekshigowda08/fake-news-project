@@ -25,6 +25,7 @@ class AnalyzeResponse(BaseModel):
     ml_prediction: Optional[Dict[str, Any]] = None
     evidence_assessment: Optional[Dict[str, Any]] = None
     semantic_alignment: Optional[Dict[str, Any]] = None
+    ai_answer: Optional[Dict[str, Any]] = None
     created_at: str
     completed_at: Optional[str] = None
 

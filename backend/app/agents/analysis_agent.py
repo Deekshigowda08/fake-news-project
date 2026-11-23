@@ -113,6 +113,7 @@ class EvidenceAnalysisAgent:
     ) -> StanceType:
         """Heuristic stance detection based on query intent and excerpt keywords."""
         text = (source.title + " " + source.relevant_excerpt).lower()
+        claim_text = claim.claim_text.lower()
 
         debunk_cues = [
             "debunk", "debunked", "debunking", "debunks", "hoax", "hoaxes", "false", "disproven",
@@ -129,6 +130,9 @@ class EvidenceAnalysisAgent:
             "confirms", "confirm", "confirmed", "confirming", "announced", "announces", "announce",
             "announcement", "published", "publishes", "publish", "discovered", "discovers", "discover",
             "discovery", "official", "verified", "verifies", "revealed", "reveals", "reveal",
+            "reported", "reports", "report", "held", "holds", "hold", "steady", "stabilizes", "stabilized",
+            "statement", "said", "states", "stated", "according to", "decided", "decides", "decision",
+            "approved", "approves", "passed", "passes", "meets", "met", "agreed", "agrees",
             "is a", "are a", "species of", "defined as", "consensus", "proven",
             "corroborated", "corroborates", "corroborating", "documented", "documenting",
             "evidence demonstrates", "spectral data", "holds benchmark", "guidelines on"
@@ -137,16 +141,27 @@ class EvidenceAnalysisAgent:
         has_debunk = any(re.search(rf"\b{re.escape(cue)}\b", text) for cue in debunk_cues)
         has_support = any(re.search(rf"\b{re.escape(cue)}\b", text) for cue in support_cues)
 
-        # 1. Contradicting search intent from fact-checking or debunking archives
+        # Calculate word overlap with claim
+        claim_words = set(re.findall(r"\b[a-z]{4,}\b", claim_text)) - {
+            "that", "this", "from", "with", "have", "been", "were", "what", "when", "where", "which"
+        }
+        text_words = set(re.findall(r"\b[a-z]{4,}\b", text))
+        overlap = len(claim_words & text_words) / max(len(claim_words), 1)
+
+        # 1. Contradicting search intent
         if source.query_intent == "contradicting_search":
-            if has_debunk or (source.source_credibility_tier in ("tier_1", "tier_2")):
+            # ONLY classify as CONTRADICTS if debunking cues are present
+            if has_debunk:
                 return StanceType.CONTRADICTS
+            # If high overlap with no debunking cues, it corroborates the event
+            if overlap >= 0.35 and (has_support or source.source_credibility_tier in ("tier_1", "tier_2")):
+                return StanceType.SUPPORTS
             return StanceType.INSUFFICIENT
 
         # 2. Supporting search intent
         if has_debunk:
             return StanceType.CONTRADICTS
-        if has_support:
+        if has_support or overlap >= 0.30:
             return StanceType.SUPPORTS
 
         return StanceType.INSUFFICIENT

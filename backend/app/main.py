@@ -58,6 +58,7 @@ from backend.app.security.url_validator import (
     SecurityValidationError,
 )
 from backend.app.orchestrator.orchestrator import VerificationOrchestrator
+from backend.app.agents.ai_reasoner import AIReasonerAgent
 from ml.inference.service import MultimodalInferenceService
 from ml.preprocessing.image import validate_and_load_image, ImageValidationError
 
@@ -69,6 +70,7 @@ create_db_and_tables()
 # Global services initialized at startup or on first request
 ml_service: Optional[MultimodalInferenceService] = None
 orchestrator: Optional[VerificationOrchestrator] = None
+ai_reasoner: Optional[AIReasonerAgent] = None
 
 # Active SSE listeners keyed by analysis_id
 sse_listeners: Dict[str, List[asyncio.Queue]] = {}
@@ -86,6 +88,13 @@ def get_orchestrator() -> VerificationOrchestrator:
     if orchestrator is None:
         orchestrator = VerificationOrchestrator()
     return orchestrator
+
+
+def get_ai_reasoner() -> AIReasonerAgent:
+    global ai_reasoner
+    if ai_reasoner is None:
+        ai_reasoner = AIReasonerAgent()
+    return ai_reasoner
 
 
 @asynccontextmanager
@@ -189,14 +198,22 @@ async def analyze_news_endpoint(
     text: Optional[str] = Form(None),
     article_url: Optional[str] = Form(None),
     mode: str = Form("full"),
+    analysis_mode: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     session: Session = Depends(get_session),
 ):
+    clean_mode = "full"
+    if isinstance(analysis_mode, str) and analysis_mode.strip():
+        clean_mode = analysis_mode.strip()
+    elif isinstance(mode, str) and mode.strip():
+        clean_mode = mode.strip()
+    mode = clean_mode
     analysis_id = str(uuid.uuid4())
     logger.info("Received analysis request %s (mode=%s)", analysis_id, mode)
 
     # 1. URL processing and SSRF safety
-    input_text = text or ""
+    input_text = text if isinstance(text, str) else ""
+    article_url = article_url if isinstance(article_url, str) and article_url.strip() else None
     if article_url:
         try:
             validate_safe_url(article_url)
@@ -215,7 +232,7 @@ async def analyze_news_endpoint(
     # 2. Image validation and sanitization
     image_bytes = None
     saved_img_ref = None
-    if image is not None:
+    if image is not None and hasattr(image, "read"):
         raw_bytes = await image.read()
         if len(raw_bytes) > 0:
             try:
@@ -270,22 +287,23 @@ async def analyze_news_endpoint(
             )
             session.add(pred_rec)
 
-    # 4. Agentic Verification Pipeline (if mode != 'ml_only')
+    # 4. Agentic Verification Pipeline (strictly bypassed in ml_only mode)
     evidence_result = None
-    orch = get_orchestrator()
-    if mode != "ml_only" and orch:
-        def event_listener(event):
-            broadcast_event(analysis_id, event)
-            # Persist event
-            rec = AgentEventRecord(
-                analysis_id=analysis_id,
-                agent_name=event["agent_name"],
-                event_type=event["event_type"],
-                status=event["status"],
-                duration_ms=event["duration_ms"],
-                structured_details=event["structured_details"],
-            )
-            session.add(rec)
+    if mode != "ml_only":
+        orch = get_orchestrator()
+        if orch:
+            def event_listener(event):
+                broadcast_event(analysis_id, event)
+                # Persist event
+                rec = AgentEventRecord(
+                    analysis_id=analysis_id,
+                    agent_name=event["agent_name"],
+                    event_type=event["event_type"],
+                    status=event["status"],
+                    duration_ms=event["duration_ms"],
+                    structured_details=event["structured_details"],
+                )
+                session.add(rec)
 
         evidence_result = orch.run_verification(
             text=input_text,
@@ -321,6 +339,16 @@ async def analyze_news_endpoint(
                 )
                 session.add(src_rec)
 
+    # 5. AI Reasoning Intervention (triggers if models are inaccurate/conflicting, ONLY in full verification mode)
+    ai_answer = None
+    if mode != "ml_only":
+        ai_reasoner_svc = get_ai_reasoner()
+        ai_answer = ai_reasoner_svc.analyze(
+            text=input_text,
+            ml_result=ml_result,
+            evidence_result=evidence_result,
+        )
+
     # Finalize analysis
     db_analysis.analysis_status = "completed"
     db_analysis.completed_at = datetime.now(timezone.utc)
@@ -338,6 +366,7 @@ async def analyze_news_endpoint(
         "semantic_alignment": ml_result.get("semantic_alignment"),
         "ocr_analysis": ml_result.get("ocr_analysis"),
         "comparative_scores": ml_result.get("comparative_scores"),
+        "ai_answer": ai_answer,
         "created_at": db_analysis.created_at.isoformat(),
         "completed_at": db_analysis.completed_at.isoformat(),
     }

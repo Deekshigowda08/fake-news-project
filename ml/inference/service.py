@@ -4,6 +4,7 @@ Coordinates:
 - BERT text classifier
 - ViT visual classifier
 - Multimodal fusion classifier
+- CNN+LSTM text classifier
 - CLIP semantic alignment
 - Soft voting & Stacking ensembles
 """
@@ -19,6 +20,7 @@ from ml.models.vit_classifier import ViTInferencePipeline, ViTNewsClassifier
 from ml.models.multimodal_fusion import MultimodalInferencePipeline, MultimodalFusionClassifier
 from ml.models.alignment_model import ClipSemanticAligner
 from ml.models.ensemble import SoftVotingEnsemble, StackingEnsemble
+from ml.models.cnn_lstm_classifier import CNNLSTMInferencePipeline, TextCNNLSTMClassifier, build_vocab_from_texts
 from ml.preprocessing.ocr_service import ImageOCRService
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,7 @@ class MultimodalInferenceService:
         aligner: Optional[ClipSemanticAligner] = None,
         ensemble: Optional[SoftVotingEnsemble] = None,
         ocr_service: Optional[ImageOCRService] = None,
+        cnn_lstm_pipeline: Optional[CNNLSTMInferencePipeline] = None,
     ):
         self.bert_pipeline = bert_pipeline
         self.vit_pipeline = vit_pipeline
@@ -42,6 +45,7 @@ class MultimodalInferenceService:
         self.aligner = aligner or ClipSemanticAligner()
         self.ensemble = ensemble or SoftVotingEnsemble()
         self.ocr_service = ocr_service or ImageOCRService()
+        self.cnn_lstm_pipeline = cnn_lstm_pipeline
 
 
     @classmethod
@@ -74,6 +78,18 @@ class MultimodalInferenceService:
         )
         fusion_pipe = MultimodalInferencePipeline(model=fusion_model, device=dev)
 
+        cnn_lstm_checkpoint = Path("checkpoints/cnn_lstm")
+        has_cnn_lstm_weights = cnn_lstm_checkpoint.exists() and (
+            (cnn_lstm_checkpoint / "best_model.pt").is_file()
+            or (cnn_lstm_checkpoint / "pytorch_model.bin").is_file()
+        )
+        if has_cnn_lstm_weights:
+            logger.info("Loading fine-tuned CNN+LSTM checkpoint from %s", cnn_lstm_checkpoint)
+            cnn_lstm_pipe = CNNLSTMInferencePipeline.load(cnn_lstm_checkpoint, device=dev)
+        else:
+            cnn_lstm_pipe = None
+            logger.info("CNN+LSTM checkpoint not found — will skip CNN+LSTM in ensemble")
+
         aligner = ClipSemanticAligner(device=dev)
         ensemble = SoftVotingEnsemble()
 
@@ -83,6 +99,7 @@ class MultimodalInferenceService:
             fusion_pipeline=fusion_pipe,
             aligner=aligner,
             ensemble=ensemble,
+            cnn_lstm_pipeline=cnn_lstm_pipe,
         )
 
     def analyze(
@@ -132,6 +149,9 @@ class MultimodalInferenceService:
         # 2. BERT text inference
         bert_res = self.bert_pipeline.predict(text) if self.bert_pipeline else None
 
+        # 2.5. CNN+LSTM text inference
+        cnn_lstm_res = self.cnn_lstm_pipeline.predict(text) if self.cnn_lstm_pipeline else None
+
         # 3. ViT image inference
         vit_res = self.vit_pipeline.predict(image_source) if self.vit_pipeline else None
 
@@ -155,6 +175,8 @@ class MultimodalInferenceService:
             model_preds["vit"] = vit_res
         if fusion_res:
             model_preds["multimodal_fusion"] = fusion_res
+        if cnn_lstm_res:
+            model_preds["cnn_lstm"] = cnn_lstm_res
 
         ensemble_res = self.ensemble.predict_sample(model_preds, has_image=has_image)
 
@@ -207,6 +229,20 @@ class MultimodalInferenceService:
                 "backbone": "BERT [768-d] + ViT [768-d] -> MLP",
             })
 
+        if cnn_lstm_res:
+            comparative_scores.append({
+                "model_key": "cnn_lstm",
+                "model_name": "CNN+LSTM Text Classifier",
+                "modality": "Text (Word Embeddings)",
+                "predicted_class": cnn_lstm_res.get("predicted_class", "unknown"),
+                "p_real": cnn_lstm_res.get("class_probabilities", {}).get("real", 0.5),
+                "p_fake": cnn_lstm_res.get("class_probabilities", {}).get("fake", 0.5),
+                "confidence": cnn_lstm_res.get("confidence", 0.5),
+                "fine_grained_class": None,
+                "ensemble_weight": round(float(weights_applied.get("cnn_lstm", 0.0)), 2),
+                "backbone": "TextCNN[2,3,4,5 filters, 100 each] + BiLSTM[128 hidden x2]",
+            })
+
         comparative_scores.append({
             "model_key": "ensemble",
             "model_name": "Ensemble Soft-Voting Consensus",
@@ -227,6 +263,7 @@ class MultimodalInferenceService:
             "bert_prediction": bert_res,
             "vit_prediction": vit_res,
             "multimodal_fusion_prediction": fusion_res,
+            "cnn_lstm_prediction": cnn_lstm_res,
             "ensemble_prediction": ensemble_res,
             "semantic_alignment": alignment_res,
             "ocr_analysis": ocr_res,

@@ -112,8 +112,8 @@ def disable_gemini(reason: str = ""):
 class EvidenceRetrievalAgent:
     """Orchestrates dual-path evidence retrieval across supporting and contradicting channels."""
 
-    def __init__(self, provider: str = "mock"):
-        self.provider = provider
+    def __init__(self, provider: str = "live"):
+        self.provider = os.getenv("EVIDENCE_PROVIDER", provider)
 
     def retrieve_for_claim(
         self,
@@ -121,8 +121,10 @@ class EvidenceRetrievalAgent:
         max_sources_per_query: int = 3,
     ) -> List[RetrievedEvidenceSource]:
         """Runs dual retrieval (supporting query and contradicting query) for a claim."""
-        query_support = claim.claim_text
-        query_debunk = f'"{claim.claim_text}" fake news hoax debunked'
+        query_support = claim.claim_text.strip()
+        # Debunk query without quotes to allow search engines to match relevant fact-checks
+        clean_text = re.sub(r'["“”\']', '', claim.claim_text).strip()
+        query_debunk = f"{clean_text} hoax debunked fact check"
 
         results: List[RetrievedEvidenceSource] = []
 
@@ -160,7 +162,17 @@ class EvidenceRetrievalAgent:
         intent: str,
         max_results: int,
     ) -> List[RetrievedEvidenceSource]:
-        """Executes query with configured provider (Gemini, DDG, or deterministic mock)."""
+        """Executes query with configured provider (live DDG news/web, Gemini, or mock fallback)."""
+        # 1. Primary: Live DuckDuckGo news and web scraping
+        if self.provider == "live":
+            try:
+                ddg_sources = self._ddg_search(claim, query, intent, max_results)
+                if ddg_sources:
+                    return ddg_sources
+            except Exception as e:
+                logger.warning("Live DDG search failed (%s), trying fallbacks", e)
+
+        # 2. Secondary: Gemini Fact-Checking search (if API key available)
         if is_gemini_available():
             try:
                 gemini_sources = self._gemini_search(claim, query, intent, max_results, os.getenv("GEMINI_API_KEY"))
@@ -173,19 +185,13 @@ class EvidenceRetrievalAgent:
                 else:
                     logger.warning("Gemini evidence retrieval failed (%s), using fallback", e)
 
-        # 2. Try Wikipedia Knowledge API for open, real-time encyclopedic facts
+        # 3. Tertiary: Wikipedia Knowledge API for encyclopedic/definitional claims
         try:
             wiki_sources = self._wiki_search(claim, query, intent, max_results)
             if wiki_sources:
                 return wiki_sources
         except Exception as e:
             logger.warning("Wikipedia knowledge search failed (%s), proceeding to fallback", e)
-
-        if self.provider == "live":
-            try:
-                return self._ddg_search(claim, query, intent, max_results)
-            except Exception as e:
-                logger.warning("Live search failed, falling back to mock provider: %s", e)
 
         return self._mock_search(claim, query, intent, max_results)
 
@@ -294,7 +300,7 @@ class EvidenceRetrievalAgent:
         if intent == "contradicting_search":
             search_term = f"{clean_claim} hoax debunked false"
             url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote(search_term)}&format=json"
-            req = urllib.request.Request(url, headers={"User-Agent": "VeritasFactChecker/1.0 (academic-research)"})
+            req = urllib.request.Request(url, headers={"User-Agent": "FakeNewsDetector/1.0 (fact-checking-research)"})
             try:
                 with urllib.request.urlopen(req, timeout=4) as response:
                     data = json.loads(response.read().decode("utf-8"))
@@ -338,7 +344,7 @@ class EvidenceRetrievalAgent:
                 return None
 
             url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote(clean_claim)}&format=json"
-            req = urllib.request.Request(url, headers={"User-Agent": "VeritasFactChecker/1.0 (academic-research)"})
+            req = urllib.request.Request(url, headers={"User-Agent": "FakeNewsDetector/1.0 (fact-checking-research)"})
             try:
                 with urllib.request.urlopen(req, timeout=4) as response:
                     data = json.loads(response.read().decode("utf-8"))
@@ -548,31 +554,71 @@ class EvidenceRetrievalAgent:
         intent: str,
         max_results: int,
     ) -> List[RetrievedEvidenceSource]:
-        """Live search integration using duckduckgo_search with URL validation."""
+        """Live news and web search integration using duckduckgo_search."""
         from duckduckgo_search import DDGS
 
         sources = []
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
-            for idx, r in enumerate(results, start=1):
-                raw_url = r.get("href", "")
-                pub = urllib.parse.urlparse(raw_url).netloc
-                validated_url = clean_source_url(raw_url, pub, claim.claim_text)
-                tier = classify_credibility_tier(validated_url)
-                sources.append(
-                    RetrievedEvidenceSource(
-                        source_id=f"{claim.claim_id}_{intent[:4]}_{idx}",
-                        claim_id=claim.claim_id,
-                        url=validated_url,
-                        publisher=pub or "Web Source",
-                        title=r.get("title", ""),
-                        publication_date=None,
-                        relevant_excerpt=r.get("body", ""),
-                        retrieval_query=query,
-                        query_intent=intent,
-                        is_primary_source=(tier == "tier_1"),
-                        source_credibility_tier=tier,
-                    )
-                )
+        clean_q = re.sub(r'["“”\n\r]', ' ', query).strip()
+        clean_q = re.sub(r'\s+', ' ', clean_q)[:100].strip()
+
+        try:
+            with DDGS(timeout=8) as ddgs:
+                # 1. Primary: Search live news wires for real-world coverage
+                try:
+                    news_results = list(ddgs.news(clean_q, max_results=max_results))
+                    for idx, r in enumerate(news_results, start=1):
+                        raw_url = r.get("url", "") or r.get("href", "")
+                        pub = r.get("source", "") or urllib.parse.urlparse(raw_url).netloc
+                        validated_url = clean_source_url(raw_url, pub, claim.claim_text)
+                        tier = classify_credibility_tier(validated_url)
+                        body_text = r.get("body", "") or r.get("snippet", "")
+                        sources.append(
+                            RetrievedEvidenceSource(
+                                source_id=f"{claim.claim_id}_{intent[:4]}_news_{idx}",
+                                claim_id=claim.claim_id,
+                                url=validated_url,
+                                publisher=pub or "News Outlet",
+                                title=r.get("title", ""),
+                                publication_date=r.get("date", "Recent"),
+                                relevant_excerpt=body_text,
+                                retrieval_query=query,
+                                query_intent=intent,
+                                is_primary_source=(tier == "tier_1"),
+                                source_credibility_tier=tier,
+                            )
+                        )
+                except Exception as ne:
+                    logger.debug("DDG news search error: %s", ne)
+
+                # 2. If news results were insufficient, supplement with web text search
+                if len(sources) < max_results:
+                    remaining = max_results - len(sources)
+                    try:
+                        text_results = list(ddgs.text(clean_q, max_results=remaining))
+                        for idx, r in enumerate(text_results, start=len(sources) + 1):
+                            raw_url = r.get("href", "") or r.get("url", "")
+                            pub = urllib.parse.urlparse(raw_url).netloc
+                            validated_url = clean_source_url(raw_url, pub, claim.claim_text)
+                            tier = classify_credibility_tier(validated_url)
+                            sources.append(
+                                RetrievedEvidenceSource(
+                                    source_id=f"{claim.claim_id}_{intent[:4]}_web_{idx}",
+                                    claim_id=claim.claim_id,
+                                    url=validated_url,
+                                    publisher=pub or "Web Source",
+                                    title=r.get("title", ""),
+                                    publication_date=None,
+                                    relevant_excerpt=r.get("body", ""),
+                                    retrieval_query=query,
+                                    query_intent=intent,
+                                    is_primary_source=(tier == "tier_1"),
+                                    source_credibility_tier=tier,
+                                )
+                            )
+                    except Exception as te:
+                        logger.debug("DDG text search error: %s", te)
+        except Exception as e:
+            logger.warning("DuckDuckGo search connection error: %s", e)
+
         return sources
 

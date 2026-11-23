@@ -20,18 +20,29 @@ export function ComparativeScoreMatrix({
   fusion,
   hasImage,
 }: ComparativeScoreMatrixProps) {
-  // Build fallback comparative scores if not provided directly
   const items: ComparativeScoreItem[] = scores && scores.length > 0 ? scores : [
     {
+      model_key: "cnn_lstm",
+      model_name: "CNN + BiLSTM Classifier",
+      modality: "Text (Word Embeddings)",
+      predicted_class: bert?.predicted_class || "real",
+      p_real: bert?.class_probabilities?.real ?? 0.5,
+      p_fake: bert?.class_probabilities?.fake ?? 0.5,
+      confidence: bert?.confidence ?? 0.5,
+      fine_grained_class: null,
+      ensemble_weight: 0.25,
+      backbone: "TextCNN (k=[2,3,4,5]) + BiLSTM (2-layer, 256-d)",
+    },
+    {
       model_key: "bert",
-      model_name: "BERT Text Classifier",
+      model_name: "BERT Contextual Classifier",
       modality: "Text (WordPiece)",
       predicted_class: bert?.predicted_class || "real",
       p_real: bert?.class_probabilities?.real ?? 0.5,
       p_fake: bert?.class_probabilities?.fake ?? 0.5,
       confidence: bert?.confidence ?? 0.5,
       fine_grained_class: (bert as any)?.fine_grained_class,
-      ensemble_weight: hasImage ? 0.35 : 0.44,
+      ensemble_weight: hasImage ? 0.25 : 0.40,
       backbone: "bert-base-uncased (110M params)",
     },
     ...(hasImage && vit && vit.status === "success"
@@ -45,7 +56,7 @@ export function ComparativeScoreMatrix({
             p_fake: vit?.class_probabilities?.fake ?? 0.5,
             confidence: vit?.confidence ?? 0.5,
             fine_grained_class: null,
-            ensemble_weight: 0.20,
+            ensemble_weight: 0.15,
             backbone: "google/vit-base-patch16-224 (86M params)",
           },
         ]
@@ -59,149 +70,153 @@ export function ComparativeScoreMatrix({
       p_fake: fusion?.class_probabilities?.fake ?? 0.5,
       confidence: fusion?.confidence ?? 0.5,
       fine_grained_class: null,
-      ensemble_weight: hasImage ? 0.45 : 0.56,
-      backbone: "BERT [768-d] + ViT [768-d] -> MLP Head",
-    },
-    {
-      model_key: "ensemble",
-      model_name: "Soft-Voting Consensus Ensemble",
-      modality: "Probability-Weighted Meta-Model",
-      predicted_class: ensemble?.predicted_class || "real",
-      p_real: ensemble?.class_probabilities?.real ?? 0.5,
-      p_fake: ensemble?.class_probabilities?.fake ?? 0.5,
-      confidence: ensemble?.confidence ?? 0.5,
-      fine_grained_class: null,
-      ensemble_weight: 1.0,
-      backbone: "Soft Voting Consensus",
+      ensemble_weight: hasImage ? 0.35 : 0.35,
+      backbone: "Text Embeddings + Image Patches -> Dense MLP",
     },
   ];
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 sm:p-7 backdrop-blur-md space-y-6 shadow-xl">
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-4">
         <div>
-          <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-sm font-mono font-bold text-indigo-400">
-              VS
-            </span>
-            <h3 className="text-lg sm:text-xl font-bold text-white">
-              Comparative Model Performance & Score Matrix
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-white" />
+            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+              Multi-Model Intelligence Matrix
             </h3>
           </div>
-          <p className="text-sm text-slate-300 mt-1">
-            Side-by-side evaluation comparing base transformers, feature concatenation, and soft-voting ensemble
+          <p className="text-xs text-zinc-400 mt-1">
+            Comparative predictions across CNN+LSTM, BERT contextual transformer, and multimodal heads.
           </p>
         </div>
-
-        <span className="rounded-xl bg-indigo-500/15 border border-indigo-500/30 px-3 py-1.5 text-sm font-mono font-bold text-indigo-300">
-          Ensemble Strategy: {ensemble?.ensemble_method || "Soft Voting Consensus"}
-        </span>
-      </div>
-
-      {/* Comparison Table for Academic Evaluation */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm border-collapse">
-          <thead>
-            <tr className="border-b border-slate-700 text-xs sm:text-sm font-extrabold uppercase tracking-wider text-slate-300 bg-slate-950/60">
-              <th className="py-3.5 px-4">Model Architecture</th>
-              <th className="py-3.5 px-4">Input Modality</th>
-              <th className="py-3.5 px-4">Predicted Class</th>
-              <th className="py-3.5 px-4">P(Real)</th>
-              <th className="py-3.5 px-4">P(Fake)</th>
-              <th className="py-3.5 px-4">Confidence</th>
-              <th className="py-3.5 px-4">Ensemble Weight</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800 font-sans">
-            {items.map((row) => {
-              const isReal = row.predicted_class === "real";
-              const isEnsemble = row.model_key === "ensemble";
-
-              return (
-                <tr
-                  key={row.model_key}
-                  className={`transition-colors ${
-                    isEnsemble
-                      ? "bg-indigo-950/30 font-semibold border-l-4 border-indigo-500"
-                      : "hover:bg-slate-800/40"
-                  }`}
-                >
-                  <td className="py-4 px-4">
-                    <span className="text-white block font-bold text-base">
-                      {row.model_name}
-                    </span>
-                    <span className="text-xs text-slate-400 font-mono block mt-0.5">
-                      {row.backbone}
-                    </span>
-                  </td>
-
-                  <td className="py-4 px-4">
-                    <span className="rounded-md bg-slate-800 px-2.5 py-1 text-xs text-slate-200 font-mono font-medium">
-                      {row.modality}
-                    </span>
-                  </td>
-
-                  <td className="py-4 px-4">
-                    <span
-                      className={`inline-block rounded-lg px-3 py-1 text-xs font-black border ${
-                        isReal
-                          ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-                          : "border-rose-500/40 bg-rose-500/15 text-rose-300"
-                      }`}
-                    >
-                      {isReal ? "REAL" : "FAKE"}
-                    </span>
-                    {row.fine_grained_class && (
-                      <span className="block text-xs text-indigo-300 font-mono mt-1 font-bold uppercase">
-                        ({row.fine_grained_class})
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="py-4 px-4 font-mono font-bold text-base text-emerald-400">
-                    {((row.p_real ?? 0.5) * 100).toFixed(1)}%
-                  </td>
-
-                  <td className="py-4 px-4 font-mono font-bold text-base text-rose-400">
-                    {((row.p_fake ?? 0.5) * 100).toFixed(1)}%
-                  </td>
-
-                  <td className="py-4 px-4 font-mono text-white font-extrabold text-base">
-                    {((row.confidence ?? 0.5) * 100).toFixed(1)}%
-                  </td>
-
-                  <td className="py-4 px-4 font-mono font-bold text-sm text-indigo-300">
-                    {isEnsemble ? "Meta Consensus" : `${Math.round((row.ensemble_weight ?? 0.33) * 100)}%`}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Comparative Analysis Takeaways */}
-      <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 p-4 space-y-2 text-xs leading-relaxed text-slate-300">
-        <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-          Academic Research Takeaways & Ablation Insights
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-slate-300">
-          <div className="space-y-1">
-            <span className="text-white font-semibold block">1. Modality Robustness:</span>
-            <p className="text-[11px] text-slate-400">
-              BERT excels at detecting semantic hyperbole and factual phrasing, while ViT evaluates visual texture anomalies. Combining them in feature concatenation yields stronger decision boundaries than either model independently.
-            </p>
-          </div>
-
-          <div className="space-y-1">
-            <span className="text-white font-semibold block">2. Soft-Voting Calibration:</span>
-            <p className="text-[11px] text-slate-400">
-              The ensemble dynamically re-weights base probabilities. When visual data is absent, the pipeline automatically re-allocates 100% of the voting weight between text networks to eliminate dummy visual bias.
-            </p>
-          </div>
+        <div className="rounded border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs font-mono font-medium text-zinc-300">
+          Ensemble: Soft Voting
         </div>
       </div>
+
+      {/* Model Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {items.map((item) => {
+          const isFake = item.predicted_class === "fake";
+          const isCNNLSTM = item.model_key === "cnn_lstm";
+
+          return (
+            <div
+              key={item.model_key}
+              className={`rounded-xl border p-4 flex flex-col justify-between transition-colors ${
+                isCNNLSTM
+                  ? "border-zinc-500 bg-zinc-900/90"
+                  : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700"
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className={`text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded ${
+                    isCNNLSTM
+                      ? "bg-white text-black font-bold"
+                      : "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                  }`}>
+                    {isCNNLSTM ? "PyTorch Model" : item.modality}
+                  </span>
+                  <span className="text-[11px] font-mono text-zinc-400">
+                    Wt: {Math.round(item.ensemble_weight * 100)}%
+                  </span>
+                </div>
+
+                <h4 className="text-sm font-bold text-white mb-0.5">{item.model_name}</h4>
+                <p className="text-[11px] text-zinc-400 font-mono mb-3 line-clamp-1" title={item.backbone}>
+                  {item.backbone}
+                </p>
+
+                {/* Predicted Pill */}
+                <div className="flex items-center justify-between rounded-lg bg-black border border-zinc-800 p-2.5 mb-3">
+                  <span className="text-xs text-zinc-400 font-medium">Prediction:</span>
+                  <span
+                    className={`text-xs font-bold px-2 py-0.5 rounded ${
+                      isFake
+                        ? "bg-zinc-800 text-white border border-zinc-600"
+                        : "bg-white text-black border border-white"
+                    }`}
+                  >
+                    {isFake ? "FAKE" : "REAL"}
+                  </span>
+                </div>
+
+                {/* Probability Bars */}
+                <div className="space-y-2">
+                  <div>
+                    <div className="flex justify-between text-[11px] font-medium mb-1">
+                      <span className="text-zinc-300">P(Real):</span>
+                      <span className="font-mono text-zinc-200">{(item.p_real * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-white rounded-full transition-all duration-300"
+                        style={{ width: `${item.p_real * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-[11px] font-medium mb-1">
+                      <span className="text-zinc-400">P(Fake):</span>
+                      <span className="font-mono text-zinc-300">{(item.p_fake * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-zinc-500 rounded-full transition-all duration-300"
+                        style={{ width: `${item.p_fake * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-zinc-800 flex items-center justify-between text-[11px]">
+                <span className="text-zinc-400 font-medium">Confidence:</span>
+                <span className="font-mono font-bold text-white">{(item.confidence * 100).toFixed(1)}%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Ensemble Summary Footer */}
+      {ensemble && (
+        <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center space-x-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-black font-black text-sm">
+              ∑
+            </div>
+            <div>
+              <h5 className="text-xs font-bold text-white uppercase tracking-wider">
+                Consensus Ensemble Verdict
+              </h5>
+              <p className="text-xs text-zinc-400">
+                Combined neural probability across all active model architectures.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="text-right">
+              <span className="text-[11px] text-zinc-400 block">Confidence</span>
+              <span className="font-mono text-sm font-bold text-white">
+                {(ensemble.confidence * 100).toFixed(1)}%
+              </span>
+            </div>
+            <span
+              className={`text-xs font-bold uppercase px-3 py-1.5 rounded-lg border ${
+                ensemble.predicted_class === "fake"
+                  ? "bg-zinc-800 text-white border-zinc-600"
+                  : "bg-white text-black border-white"
+              }`}
+            >
+              {ensemble.predicted_class === "fake" ? "PREDICTED FAKE" : "PREDICTED REAL"}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -124,6 +124,20 @@ export interface OCRPipelineResult {
   };
 }
 
+export interface AIAnswer {
+  is_triggered: boolean;
+  status: "active" | "standby";
+  trigger_reasons: string[];
+  message?: string;
+  verdict?: "REAL" | "FAKE" | "MISLEADING" | "UNVERIFIABLE" | null;
+  confidence?: number | null;
+  summary?: string | null;
+  detailed_explanation?: string | null;
+  key_points?: string[];
+  model_critique?: string | null;
+  engine?: string;
+}
+
 export interface FullAnalysisResponse {
   analysis_id: string;
   status: string;
@@ -136,6 +150,7 @@ export interface FullAnalysisResponse {
     has_image: boolean;
     available_modalities: string[];
     bert_prediction: ModelPrediction;
+    cnn_lstm_prediction?: ModelPrediction;
     vit_prediction: ModelPrediction;
     multimodal_fusion_prediction: ModelPrediction & { modality_used: string };
     ensemble_prediction: EnsemblePrediction;
@@ -155,10 +170,11 @@ export interface FullAnalysisResponse {
     adjudication: AdjudicationVerdict;
     events: AgentEvent[];
     total_duration_ms: number;
-  };
+  } | null;
   semantic_alignment?: SemanticAlignment;
   ocr_analysis?: OCRPipelineResult;
   comparative_scores?: ComparativeScoreItem[];
+  ai_answer?: AIAnswer;
   created_at: string;
   completed_at: string;
 }
